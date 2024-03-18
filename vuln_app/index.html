@@ -1,0 +1,53 @@
+<html>
+    <header>
+        <title>secure application</title>
+        <link rel="stylesheet" href="vuln_app.css"></link>
+    </header>
+    <body>
+        <main>
+            <section>
+                <div class="title-bar">
+                    <img src="Monitor_padlock.svg" id="icon-photo"></img>
+                    <span id="name">
+                        Secure Store
+                    </span>
+                    <span>
+
+                    </span>
+                </div>
+            </section>
+            <section>
+                <div id="product-box">
+                    <div>
+                        <img src="teddy_bear.jpg"></img>
+                    </div>
+                    <h1 class="centered">Teddy bear</h1>
+                    <div>
+                        <p id="description">
+                            Buy yourself or your children an adorable teddy bear! Price includes shipping; select your location to get an accurate price. 
+                        </p>
+                    </div>
+                    <div>
+                        <span class="centered" id="price">{{price}}</span>
+                        <form action="">
+                            <input list="locations" name="location"> </input>
+                            <datalist id="locations">
+                                <option value="US"></option>
+                                <option value="UK"></option>
+                                <option value="France"></option>
+                                <option value="Belgium"></option>
+                            </datalist>
+                            <input type="submit" value="change location"/>
+                        </form>
+                        <form action="/orders" method="post">
+                            <input type="text" name='csrf' readonly hidden value="{{csrf}}">
+                            <input type="text" name="location" readonly hidden value="{{location}}">
+                            <input type="submit" value="buy" {{disabled}}/>
+                        </form>
+                        
+                    </div>
+                </div>
+            </section>
+        </main>
+    </body>
+</html>

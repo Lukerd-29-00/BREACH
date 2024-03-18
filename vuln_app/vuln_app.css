@@ -1,0 +1,28 @@
+#icon-photo{
+    width: 50px;
+    height: 50px;
+    position: sticky;
+
+}
+.title-bar{
+    position: sticky;
+    background-color: green;
+    display: flex;
+    justify-content: space-between;
+
+    min-height: 52px;
+    height: 5%;
+    width: 100%
+
+}
+
+#name{
+    display: flex;
+    text-align: center;
+    font-size: 32;
+
+}
+
+.centered{
+    text-align: center;
+}
