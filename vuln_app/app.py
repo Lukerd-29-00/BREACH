@@ -14,6 +14,8 @@ files = set(files)
 
 csrf = uuid.uuid4().hex
 
+orders = {}
+
 @app.route("/<path>")
 @app.errorhandler(404)
 def serve_file(path):
@@ -34,17 +36,24 @@ def index():
     else:
         return flask.render_template('index.html',price=f"Error: location not found!",csrf=csrf,location=location,disabled='disabled')
 
-@app.route("/orders",methods=["POST"])
+@app.route("/orders",methods=["POST",'GET'])
 def buy():
-    req_csrf = flask.request.form['csrf']
-    location= flask.request.form['location']
-    if location in locations.keys() and csrf == req_csrf:
-        id = uuid.uuid4()
-        return flask.render_template("ordered.html",id=id.hex)
-    elif not location in locations.keys():
-        return "Invalid location", 400
+    if flask.request.method == 'POST':
+        req_csrf = flask.request.form['csrf']
+        location= flask.request.form['location']
+        if location in locations.keys() and csrf == req_csrf:
+            id = uuid.uuid4()
+            orders[id.hex] = {"location": location}
+            return flask.render_template("ordered.html",id=id.hex)
+        elif not location in locations.keys():
+            return "Invalid location", 400
+        else:
+            return "Unauthorized", 401
     else:
-        return "Unauthorized", 401
+        response = flask.make_response(json.dumps(orders))
+        response.headers['Content-Type'] = 'application/json'
+        return response
+
     
 app.config["COMPRESS_ALGORITHM"] = ['deflate']
 flask_compress.Compress(app)

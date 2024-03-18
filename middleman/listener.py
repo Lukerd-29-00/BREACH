@@ -33,7 +33,7 @@ def place_conversation(pkt):
     if cli_port in conversations.keys():
         logger.info(f"Added {pkt} to queue {cli_port}")
         conversations[cli_port].put(pkt)
-    elif 'S' in pkt.flags:
+    elif 'S' in pkt.flags and not 'A' in pkt.flags:
         logger.info(f"Found new conversation {cli_port} opened with {pkt}")
         conversations[cli_port] = queue.Queue()
         conversations[cli_port].put(pkt)

